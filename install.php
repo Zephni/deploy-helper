@@ -29,7 +29,7 @@ foreach ($copyFiles as $source => $destination) {
 echo PHP_EOL;
 
 // In white, tell the user how to run the deployhelper command
-echo "\033[0;37mTo run the deployhelper command, use the following command:" . PHP_EOL;
+echo "\033[0;37mTo run deployhelper, use the following command:" . PHP_EOL;
 
 // In yellow, show the command php ./deployhelper
 echo "\033[0;33mphp ./deployhelper" . "\033[0m" . PHP_EOL;

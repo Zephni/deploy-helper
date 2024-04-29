@@ -2,11 +2,6 @@
     "name": "webregulate/deploy-helper",
     "description": "An easy to use cli interface for deploying changes, commits, files etc, and the ability to run npm commands, and deploying builds to a live server",
     "license": "MIT",
-    "scripts": {
-        "post-install-cmd": [
-            "echo 'Install Deploy Helper with: php ./vendor/webregulate/deploy-helper/install.php'"
-        ]
-    },
     "autoload": {
         "psr-4": {
             "WebRegulate\\DeployHelper\\": "src/"
