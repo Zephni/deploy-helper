@@ -5,7 +5,8 @@ $cwd = getcwd();
 
 // Set an array of the paths and filenames we need to copy, not that the value is the destination from the cwd root
 $copyFiles = [
-    __DIR__.'/files/deployhelper.json' => 'deployhelper.json'
+    __DIR__.'/files/deployhelper.json' => 'deployhelper.json',
+    __DIR__.'/files/deployhelper' => 'deployhelper',
 ];
 
 echo PHP_EOL;

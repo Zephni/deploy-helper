@@ -1,0 +1,14 @@
+<?php
+
+// Define path to run.php
+define('RUN_PATH', './vendor/webregulate/deploy-helper/run.php');
+
+// Check RUN_PATH exists
+if (!file_exists(RUN_PATH)) {
+    // Display error message in red text
+    echo PHP_EOL."\033[31mError: vendor/webregulate/deploy-helper/run.php not found.\033[0m".PHP_EOL.PHP_EOL;
+    die();
+}
+
+// Include run.php
+include(RUN_PATH);
