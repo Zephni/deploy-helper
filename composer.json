@@ -1,0 +1,19 @@
+{
+    "name": "webregulate/deploy-helper",
+    "description": "An easy to use cli interface for deploying changes, commits, files etc, and the ability to run npm commands, and deploying builds to a live server",
+    "version": "1.0.0",
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "WebRegulate\\DeployHelper\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Craig Dennis",
+            "email": "craig.dennis@webregulate.co.uk"
+        }
+    ],
+    "minimum-stability": "stable",
+    "require": {}
+}
