@@ -11,13 +11,20 @@ composer require webregulate/deploy-helper --dev
 deployhelper*
 ```
 
-### 3. Run the install script
+### 3. Add this script to your composer.json
+```
+"scripts": {
+    "deploy": "php ./vendor/webregulate/deploy-helper/deployhelper.php"
+}
+```
+
+### 4. Run the install script
 ```
 php ./vendor/webregulate/deploy-helper/install.php
 ```
 This will create the default `deployhelper.json` file in the root of your project.
 
-### 4. Setting up deployhelper.json
+### 5. Setting up deployhelper.json
 ```
 {
     "devserver": {
@@ -53,7 +60,7 @@ Note you can add or remove any of the groups (such as the devserver and producti
 
 ### Run with php
 ```
-php ./deployhelper
+composer run deploy
 ```
 
 #### More help coming soon...

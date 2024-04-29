@@ -5,8 +5,7 @@ $cwd = getcwd();
 
 // Set an array of the paths and filenames we need to copy, not that the value is the destination from the cwd root
 $copyFiles = [
-    __DIR__.'/files/deployhelper.json' => 'deployhelper.json',
-    __DIR__.'/files/deployhelper' => 'deployhelper',
+    __DIR__.'/files/deployhelper.json' => 'deployhelper.json'
 ];
 
 echo PHP_EOL;
@@ -25,5 +24,18 @@ foreach ($copyFiles as $source => $destination) {
         echo "\033[0;33mFile " . $destination . ' already exists, please delete it and try again.' . "\033[0m" . PHP_EOL;
     }
 }
+
+echo PHP_EOL;
+
+// In yellow, remind the user to add the following to their composer.json file:
+echo "\033[0;33mPlease add the following to your composer.json scripts:" . PHP_EOL;
+/* Output the following in white:
+"scripts": {
+    "deploy": "php ./vendor/webregulate/deploy-helper/deployhelper.php"
+}
+*/
+echo "\033[0;37m\"scripts\": {" . PHP_EOL;
+echo "    \"deploy\": \"php ./vendor/webregulate/deploy-helper/deployhelper.php\"" . PHP_EOL;
+echo "}";
 
 echo PHP_EOL;
