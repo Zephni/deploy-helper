@@ -28,15 +28,11 @@ foreach ($copyFiles as $source => $destination) {
 
 echo PHP_EOL;
 
-// In yellow, remind the user to add the following to their composer.json file:
-echo "\033[0;33mPlease add the following to your composer.json scripts:" . PHP_EOL;
-/* Output the following in white:
-"scripts": {
-    "deploy": "php ./vendor/webregulate/deploy-helper/deployhelper.php"
-}
-*/
-echo "\033[0;37m\"scripts\": {" . PHP_EOL;
-echo "    \"deploy\": \"php ./vendor/webregulate/deploy-helper/deployhelper.php\"" . PHP_EOL;
-echo "}";
+// In white, tell the user how to run the deployhelper command
+echo "\033[0;37mTo run the deployhelper command, use the following command:" . PHP_EOL;
+
+// In yellow, show the command php ./deployhelper
+echo "\033[0;33mphp ./deployhelper" . PHP_EOL;
+
 
 echo PHP_EOL;
