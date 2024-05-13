@@ -1,10 +1,15 @@
 <?php
 
-// Require Composer autoload
-require_once './vendor/autoload.php';
+// Define base path to deploy-helper
+define('DEPLOY_HELPER_BASE_PATH', './vendor/webregulate/deploy-helper');
+
+// Loop through all files in src/ directory and require them
+foreach (glob(DEPLOY_HELPER_BASE_PATH . '/src/*.php') as $filename) {
+    require_once $filename;
+}
 
 // Define path to run.php
-define('RUN_PATH', './vendor/webregulate/deploy-helper/run.php');
+define('RUN_PATH', DEPLOY_HELPER_BASE_PATH . '/run.php');
 
 // Check RUN_PATH exists
 if (!file_exists(RUN_PATH)) {
