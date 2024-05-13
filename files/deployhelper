@@ -1,5 +1,8 @@
 <?php
 
+// Require Composer autoload
+require_once './vendor/autoload.php';
+
 // Define path to run.php
 define('RUN_PATH', './vendor/webregulate/deploy-helper/run.php');
 
