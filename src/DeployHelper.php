@@ -1537,7 +1537,7 @@ class DeployHelper
                     $this->echo(" - ".$configKey."\n", "white");
                 }
 
-                $selectedConfigKey = $this->ask("Which environment would you like to use? (".implode(", ", $configKeys).")\n", "grey", $configKeys[0]);
+                $selectedConfigKey = $this->ask("Which environment would you like to use? (".implode(", ", $configKeys).")", "grey");
             }
             else {
                 $selectedConfigKey = trim($presetEnvironment);
