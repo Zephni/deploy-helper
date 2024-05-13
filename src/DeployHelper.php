@@ -6,8 +6,8 @@
 /*------------------------------------
     DeployHelper
     Author: Craig Dennis
-    Date: 2023-01-28
-    Version: 1.0.1
+    Date: 2024-05-13
+    Version: 1.0.2
     Description: Helper script to upload (or manage) files to a server via SFTP
 
     RUN IN TERMINAL WITH:
@@ -160,6 +160,11 @@ class DeployHelper
                 $this->commandsToRun = [];
                 $this->commandsCache = [];
                 $this->echo("Commands cleared\n", "green");
+            }),
+
+            // Run bash script
+            new DeployHelperOption("shell", "Open interactive shell on remote", function ($autoConfirm = false, $additionalArgs = []) {
+                $this->remoteInteractiveShell($autoConfirm);
             }),
 
             ($this->numConfigKeys > 1) ? new DeployHelperOption("switch", "Switch config", function ($autoConfirm = false, $additionalArgs = []) {
@@ -911,6 +916,63 @@ class DeployHelper
         }, $autoConfirm);
     }
 
+    private function remoteInteractiveShell($autoConfirm = false)
+    {
+        // Get the base laravel directory (remoteBasePath + applicationDirectory)
+        $baseLaravelDirectory = $this->config->remoteBasePath . $this->config->applicationDirectory;
+
+        // Connect with SSH
+        $this->dryRun = false;
+        $this->createSFTPConnectionIfNotSet();
+        $this->dryRun = true;
+
+        // If $this->sftpConnection is null then bail
+        if($this->sftpConnection == null)
+        {
+            return $this->returnWithMessage("SSH connection not set", "red");
+        }
+
+        // Run the command in a SSH shell
+        $shellResource = ssh2_shell($this->sftpConnection, 'vanilla');
+
+        // If $shellResource is false then notify user and show the ssh error
+        if($shellResource === false)
+        {
+            $sshError = error_get_last();
+            $this->echo("SSH error: ".$sshError['message']."\n", "red");
+        }
+
+        // Notify the user that they are connected and their current directory
+        $this->echo("Connected at path: ".$this->color($baseLaravelDirectory, "white")."\n", "green");
+
+        // If $shellResource is not false then run the shell in a while loop until user types 'exit'
+        while(true)
+        {
+            // Get user input
+            $userInput = $this->ask("Enter command ('exit' to quit)", "");
+
+            // If user input is 'exit' then break out of loop
+            if($userInput == 'exit') {
+                break;
+            }
+
+            // Write the user input to the shell
+            fwrite($shellResource, $userInput."\n");
+
+            // Wait 1 second
+            $this->wait(1);
+
+            // Get the output from the shell
+            $shellOutput = stream_get_contents($shellResource);
+
+            // Echo the output to the user
+            $this->echo($shellOutput);
+        }
+
+        // Return
+        return;
+    }
+
     private function ask(string $question, mixed $default = null): string | null
     {
         // Show question wrapped in yellow
@@ -1370,7 +1432,7 @@ class DeployHelper
             $this->exitWithMessage("Error: Could not connect to SFTP server:".$e->getMessage());
         }
 
-        if(!$this->sftpConnection) {
+        if(!$this->sftpConnection || $this->sftpConnection == null) {
             $this->exitWithMessage("Error: Could not connect to SFTP server.");
         }
 
@@ -1380,7 +1442,7 @@ class DeployHelper
         }
 
         // If connected and logged in, confirm to user and return SFTP connection
-        $this->echo("Connected to SFTP server (" . $this->config->host . ", user: " . $this->config->user . ")\n", "green");
+        $this->echo("Connected to SFTP server: " . $this->color($this->config->host, 'white') . $this->color(", as user: ", 'green') . $this->color($this->config->user, 'white') . "\n", "green");
 
         // Create SFTP object (for use with ssh2_sftp_* functions)
         $this->sftpObject = ssh2_sftp($this->sftpConnection);
