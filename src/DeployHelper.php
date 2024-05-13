@@ -918,9 +918,6 @@ class DeployHelper
 
     private function remoteInteractiveShell($autoConfirm = false)
     {
-        // Get the base laravel directory (remoteBasePath + applicationDirectory)
-        $baseLaravelDirectory = $this->config->remoteBasePath . $this->config->applicationDirectory;
-
         // Connect with SSH
         $this->dryRun = false;
         $this->createSFTPConnectionIfNotSet();
@@ -932,51 +929,113 @@ class DeployHelper
             return $this->returnWithMessage("SSH connection not set", "red");
         }
 
-        // Run the command in a SSH shell
-        $shellResource = ssh2_shell($this->sftpConnection, 'vanilla');
+        // Set the cwd to the base laravel directory (remoteBasePath + applicationDirectory)
+        $cwd = $this->config->remoteBasePath . $this->config->applicationDirectory;
+
+        // Start the ssh2 shell stream and cd to the $cwd
+        $stream = ssh2_shell($this->sftpConnection, 'vanilla', null, 200);
+        fwrite($stream, "cd $cwd".PHP_EOL);
+        flush();
+        stream_set_blocking($stream, true);
 
         // If $shellResource is false then notify user and show the ssh error
-        if($shellResource === false)
+        if($stream === false)
         {
             $sshError = error_get_last();
             $this->echo("SSH error: ".$sshError['message']."\n", "red");
         }
 
-        // Notify the user that they are connected and their current directory
-        $this->echo("Connected at path: ".$this->color($baseLaravelDirectory, "white")."\n", "green");
-
         // If $shellResource is not false then run the shell in a while loop until user types 'exit'
         while(true)
         {
             // Get user input
-            $userInput = $this->ask("Enter command ('exit' to quit)", "");
+            $userInput = $this->ask($this->color("['exit' to return] ", 'grey').$this->color($cwd, 'green'), "", " >> ");
 
             // If user input is 'exit' then break out of loop
             if($userInput == 'exit') {
                 break;
             }
 
-            // Write the user input to the shell
-            fwrite($shellResource, $userInput."\n");
+            // Write the user input to the shell and execute with PHP_EOL (simulates enter key)
+            flush();
+            $endMarker = '__DH_END_OF_OUTPUT__'; // Generate a unique end marker and add it as a final command to echo
+            $appendEchoEndMarkerCommand = '; echo "' . $endMarker . '"';
+            fwrite($stream, $userInput . $appendEchoEndMarkerCommand . PHP_EOL);
+            stream_set_blocking($stream, true);
 
-            // Wait 1 second
-            $this->wait(1);
+            // Get the output from the shell 
+            while($line = fgets($stream)) {
+                flush();
+                $trimmedLine = trim($line);
 
-            // Get the output from the shell
-            $shellOutput = stream_get_contents($shellResource);
+                // If the trimmed line is empty or "cd $cwd" then skip it
+                if($trimmedLine == '' || $trimmedLine == "cd $cwd") {
+                    continue;
+                }
 
-            // Echo the output to the user
-            $this->echo($shellOutput);
+                // If the trimmed line starts with 'Last login: ' or the user input then skip it
+                if(str_starts_with($trimmedLine, 'Last login: ') || str_starts_with($trimmedLine, $userInput)) {
+                    // For now, debug this by outputting in red
+                    // $this->echo($trimmedLine, 'red');
+                    continue;
+                }
+
+                // If the line contains the linux [any chars]$ regex, then skip
+                if(preg_match('/\[[^\]]+\]\$/', $trimmedLine)) {
+                    // For now, debug this by outputting in yellow
+                    // $this->echo($trimmedLine, 'yellow');
+                    continue;
+                }
+
+                if (strpos($trimmedLine, $endMarker) !== false) {
+                    // For now, debug this by outputting in green
+                    // $this->echo($trimmedLine, 'green');
+                    // We've found the end marker, break out of the loop
+                    break;
+                }
+                
+                // Echo the output to the user
+                $this->echo($trimmedLine . PHP_EOL);
+            }
+
+            // Silently get the pwd to update the current working directory
+            flush();
+            fwrite($stream, "pwd" . $appendEchoEndMarkerCommand . PHP_EOL);
+            stream_set_blocking($stream, true);
+
+            // Get the output from the shell (only take the last non empty line)
+            $findingNewCwd = '';
+            while($line = fgets($stream)) {
+                // If the line contains $appendEchoEndMarkerCommand then skip it, as this is the command we just ran being outputted back by the server
+                if (strpos($line, $appendEchoEndMarkerCommand) !== false) {
+                    continue;
+                }
+
+                if (strpos($line, $endMarker) !== false) {
+                    // We've found the end marker, break out of the loop
+                    break;
+                }
+
+                flush();
+                if(trim($line) != '') {
+                    $findingNewCwd = trim($line);
+                }
+            }
+
+            // Update the current working directory
+            $cwd = $findingNewCwd;
         }
+
+        fclose($stream);
 
         // Return
         return;
     }
 
-    private function ask(string $question, mixed $default = null): string | null
+    private function ask(string $question, mixed $default = null, string $preQuestionString = ': '): string | null
     {
         // Show question wrapped in yellow
-        $this->echo("\n".$question.": ", 'yellow');
+        $this->echo("\n$question$preQuestionString", 'yellow');
 
         // Get user input
         $handle = fopen("php://stdin", "r");
