@@ -63,7 +63,7 @@ class DeployHelper
 
         $this->config = $this->verifyAndBuildConfig($jsonConfigFile);
 
-        $this->localBaseDirectory = $this->unix_path(dir(__DIR__)->path);
+        $this->localBaseDirectory = $this->unix_path(getcwd());
 
         $this->options = [
             "PREPARE COMMANDS",
