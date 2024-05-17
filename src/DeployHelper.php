@@ -6,8 +6,8 @@
 /*------------------------------------
     DeployHelper
     Author: Craig Dennis
-    Date: 2024-05-13
-    Version: 1.0.2
+    Date: 2024-05-17
+    Version: 1.0.3
     Description: Helper script to upload (or manage) files to a server via SFTP
 
     RUN IN TERMINAL WITH:
@@ -52,6 +52,7 @@ class DeployHelper
     private $jsonConfigFile = null;
     private $numConfigKeys = 0;
     private $forceSFTPRefresh = false;
+    private $keepCommandsAfterRunning = false;
     private const IGNORE_COMMAND = "IGNORE_COMMAND";
     private const PATH_SELECTOR_MODE_FILE = 1;
     private const PATH_SELECTOR_MODE_FOLDER = 2;
@@ -160,6 +161,20 @@ class DeployHelper
                 $this->commandsToRun = [];
                 $this->commandsCache = [];
                 $this->echo("Commands cleared\n", "green");
+            }),
+
+            new DeployHelperOption("keep", "Set keep commands mode [arg_1: boolean]", function ($autoConfirm = false, $additionalArgs = []) {
+                $arg1_bool = count($additionalArgs) > 0 ? $additionalArgs[0] : null;
+
+                if($arg1_bool == 'true' || $arg1_bool == '1' || $arg1_bool == 'on' || $arg1_bool == 'yes') {
+                    $this->keepCommandsAfterRunning = true;
+                    $this->echo("Keep mode set to: ".$this->color('ON', 'green')."\n", "green");
+                } else if($arg1_bool == 'false' || $arg1_bool == '0' || $arg1_bool == 'off' || $arg1_bool == 'no') {
+                    $this->keepCommandsAfterRunning = false;
+                    $this->echo("Keep mode set to: ".$this->color('OFF', 'red')."\n", "red");
+                } else {
+                    $this->echo("Invalid argument [1]: Must be boolean eg. 'true', '1', 'on', 'yes', or the negative".PHP_EOL, "red");
+                }
             }),
 
             // Run bash script
@@ -278,7 +293,10 @@ class DeployHelper
         $this->echo("\n[Current config: \033[1;33m".$this->configKey."\033[0m - ".$this->config->remoteBasePath."]", "grey");
 
         // Display number of prepared commands
-        $this->echo("\n[Prepared commands: ".$this->color(count($this->commandsToRun), "green")."]\n", "grey");
+        $this->echo("\n[", "grey");
+        $this->echo("Prepared commands: ".$this->color(count($this->commandsToRun), "green"), "grey");
+        $this->echo(", Keep mode: ".$this->color($this->keepCommandsAfterRunning ? "ON" : "OFF", $this->keepCommandsAfterRunning ? "red" : "green"), "grey");
+        $this->echo("]\n", "grey");
 
         // Allow user to select option
         return $this->ask("Select an option", "");
@@ -359,7 +377,7 @@ class DeployHelper
             }
 
             // Reset commands to run
-            if(!$this->dryRun) {
+            if(!$this->dryRun && !$this->keepCommandsAfterRunning) {
                 $this->commandsToRun = [];
             }
         }
