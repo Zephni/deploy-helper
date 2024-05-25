@@ -573,16 +573,6 @@ class DeployHelper
 
                         $fileShow = $file;
 
-                        // Check how many directory levels $file has
-                        $levels = preg_match_all('/\//', $fileShow);
-
-                        // If more than 2 directories, only show first directory
-                        if(is_int($levels) && $levels > 2){
-                            // Get all directory parts
-                            $parts = explode('/', $fileShow);
-                            $fileShow = $parts[0] . '/.../' . $parts[count($parts) - 2] . '/' . $parts[count($parts) - 1];
-                        }
-
                         // If dry run then show user
                         if($this->dryRun) $this->echo("DRY RUN: ", "grey");
 
@@ -769,6 +759,11 @@ class DeployHelper
         // User must select a branch
         $userSelectedBranchName = $this->showBranchNameSelector();
 
+        // If $userSelectedBranchName is null then bail
+        if($userSelectedBranchName == null) {
+            return;
+        }
+
         // User must select a commit
         $userSelectedCommitHash = $this->showCommitSelector($userSelectedBranchName);
 
@@ -805,6 +800,11 @@ class DeployHelper
 
         // Get user to select a branch
         $userSelectedBranchIndex = $this->ask("Select a branch by index (default 1)", 1);
+
+        // If not numeric, find the index of the branch name
+        if(!is_numeric($userSelectedBranchIndex)) {
+            $userSelectedBranchIndex = array_search($userSelectedBranchIndex, $branches);
+        }
 
         // If user selected branch number is null or not in branches array then bail
         if($userSelectedBranchIndex == null || !array_key_exists($userSelectedBranchIndex, $branches)) {
