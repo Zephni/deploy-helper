@@ -39,8 +39,9 @@ use WebRegulate\DeployHelper\DeployHelperOption;
 class DeployHelper
 {
     // Properties
-    private string $configKey;
-    private object $config;
+    private string $environmentConfigKey;
+    private object $environmentConfig;
+    private object $mainConfig;
     public array $options = [];
     private array $commandsToRun = [];
     private array $commandsCache = [];
@@ -53,6 +54,7 @@ class DeployHelper
     private $numConfigKeys = 0;
     private $forceSFTPRefresh = false;
     private $keepCommandsAfterRunning = false;
+    private $hideOptionsDisplay = false;
     private const IGNORE_COMMAND = "IGNORE_COMMAND";
     private const PATH_SELECTOR_MODE_FILE = 1;
     private const PATH_SELECTOR_MODE_FOLDER = 2;
@@ -62,7 +64,7 @@ class DeployHelper
     {
         $this->jsonConfigFile = $jsonConfigFile;
 
-        $this->config = $this->verifyAndBuildConfig($jsonConfigFile);
+        $this->environmentConfig = $this->verifyAndBuildConfig($jsonConfigFile);
 
         $this->localBaseDirectory = $this->unix_path(getcwd());
 
@@ -81,29 +83,63 @@ class DeployHelper
                 $this->runList($autoConfirm);
             }),
 
+            new DeployHelperOption("local", "Run a command in the local terminal", function ($autoConfirm = false, $additionalArgs = []) {
+                $command = $this->ask("Enter command to run", null);
+
+                if($command == null) {
+                    $this->echo("No command entered\n", "red");
+                    return;
+                }
+
+                // $output = shell_exec($command);
+                // $this->echo("\n".$output);
+                // $this->wait(0.5);
+
+                // Instead we need to do this as a stream and allow the user to interact with the local terminal
+                // So we now use proc_open and stream_set_blocking to allow the user to interact with the terminal
+                $process = proc_open($command, [STDIN, STDOUT, STDERR], $pipes);
+
+                // If process is null then bail
+                if($process == null) {
+                    $this->echo("Failed to run command\n", "red");
+                    return;
+                }
+
+                // Loop through the pipes and output the data
+                foreach($pipes as $pipe) {
+                    stream_set_blocking($pipe, 0);
+                    while($line = fgets($pipe)) {
+                        echo $line;
+                    }
+                }
+
+                // Allow user to continue interacting with the terminal
+                proc_close($process);
+            }),
+
+            "UPLOAD COMMANDS",
+
+            // new DeployHelperOption("1", "Prepare: Remove build directory", function ($autoConfirm = false, $additionalArgs = []) {
+            //     $this->runRemoveBuildDirectory($autoConfirm);
+            // }),
+
+            // new DeployHelperOption("2", "Prepare: npm run build", function ($autoConfirm = false, $additionalArgs = []) {
+            //     $this->runNPMRunBuild($autoConfirm);
+            // }),
+
+            new DeployHelperOption("gitchanges", "Prepare: Sync active git changes", function ($autoConfirm = false, $additionalArgs = []) {
+                $this->runGitChanges($autoConfirm, 'git status --short --porcelain --untracked-files');
+            }),
+
+            new DeployHelperOption("uploadbuild", "Prepare: Upload build directory", function ($autoConfirm = false, $additionalArgs = []) {
+                $this->runUploadDirectory($this->environmentConfig->buildDirectory, $autoConfirm);
+            }),
+
             new DeployHelperOption("commits", "Upload changes from a specific branch->commit", function ($autoConfirm = false, $additionalArgs = []) {
                 $this->uploadChangesFromCommit($autoConfirm);
             }),
 
-            "PREPARE DEPLOY STEPS",
-
-            new DeployHelperOption("1", "Prepare: Remove build directory", function ($autoConfirm = false, $additionalArgs = []) {
-                $this->runRemoveBuildDirectory($autoConfirm);
-            }),
-
-            new DeployHelperOption("2", "Prepare: npm run build", function ($autoConfirm = false, $additionalArgs = []) {
-                $this->runNPMRunBuild($autoConfirm);
-            }),
-
-            new DeployHelperOption("3", "Prepare: Sync active git changes", function ($autoConfirm = false, $additionalArgs = []) {
-                $this->runGitChanges($autoConfirm, 'git status --short --porcelain --untracked-files');
-            }),
-
-            new DeployHelperOption("4", "Prepare: Upload build directory", function ($autoConfirm = false, $additionalArgs = []) {
-                $this->runUploadDirectory($this->config->buildDirectory, $autoConfirm);
-            }),
-
-            "DEPLOY",
+            "DRY RUN OR RUN COMMANDS",
 
             new DeployHelperOption("dry", "Dry run prepared commands", function ($autoConfirm = false, $additionalArgs = []) {
                 $this->dryRun = true;
@@ -115,35 +151,35 @@ class DeployHelper
                 $this->runPreparedCommands(false);
             }),
 
-            new DeployHelperOption("deploy", "Run steps 1 - 4 (With confirmation before exiting DRY RUN mode)", function ($autoConfirm = false, $additionalArgs = []) {
-                // If force is set, supress dry output
-                if ($autoConfirm) {
-                    $this->supressOutput = true;
-                }
+            // new DeployHelperOption("deploy", "Run steps 1 - 4 (With confirmation before exiting DRY RUN mode)", function ($autoConfirm = false, $additionalArgs = []) {
+            //     // If force is set, supress dry output
+            //     if ($autoConfirm) {
+            //         $this->supressOutput = true;
+            //     }
 
-                $this->runRemoveBuildDirectory($autoConfirm);
-                $this->runNPMRunBuild($autoConfirm);
-                $this->runGitChanges($autoConfirm, 'git status --short --porcelain --untracked-files');
+            //     $this->runRemoveBuildDirectory($autoConfirm);
+            //     $this->runNPMRunBuild($autoConfirm);
+            //     $this->runGitChanges($autoConfirm, 'git status --short --porcelain --untracked-files');
 
-                // Confirm running the above commands out of dry run mode
-                if (!$autoConfirm && !$this->askContinue("Exit DRY RUN mode and run above commands before preparing build directory?")) {
-                    return;
-                }
+            //     // Confirm running the above commands out of dry run mode
+            //     if (!$autoConfirm && !$this->askContinue("Exit DRY RUN mode and run above commands before preparing build directory?")) {
+            //         return;
+            //     }
 
-                if($autoConfirm) $this->supressOutput = false;
-                $this->runPreparedCommands(false);
-                if($autoConfirm) $this->supressOutput = true;
+            //     if($autoConfirm) $this->supressOutput = false;
+            //     $this->runPreparedCommands(false);
+            //     if($autoConfirm) $this->supressOutput = true;
 
-                $this->runUploadDirectory($this->config->buildDirectory, $autoConfirm);
+            //     $this->runUploadDirectory($this->environmentConfig->buildDirectory, $autoConfirm);
 
-                // Confirm running the above commands out of dry run mode
-                if (!$autoConfirm && !$this->askContinue("Exit dry run mode and run above commands?")) {
-                    return;
-                }
+            //     // Confirm running the above commands out of dry run mode
+            //     if (!$autoConfirm && !$this->askContinue("Exit dry run mode and run above commands?")) {
+            //         return;
+            //     }
 
-                if($autoConfirm) $this->supressOutput = false;
-                $this->runPreparedCommands(false);
-            }),
+            //     if($autoConfirm) $this->supressOutput = false;
+            //     $this->runPreparedCommands(false);
+            // }),
 
             "OTHER",
 
@@ -155,12 +191,6 @@ class DeployHelper
                 $this->dryRun = false;
                 $this->createSFTPConnectionIfNotSet();
                 $this->dryRun = true;
-            }),
-
-            new DeployHelperOption("clr", "Clear prepared commands", function ($autoConfirm = false, $additionalArgs = []) {
-                $this->commandsToRun = [];
-                $this->commandsCache = [];
-                $this->echo("Commands cleared\n", "green");
             }),
 
             new DeployHelperOption("keep", "Set keep commands mode [arg_1: boolean]", function ($autoConfirm = false, $additionalArgs = []) {
@@ -177,19 +207,81 @@ class DeployHelper
                 }
             }),
 
-            // Run bash script
+            // Open shell on remote machine
             new DeployHelperOption("shell", "Open interactive shell on remote", function ($autoConfirm = false, $additionalArgs = []) {
                 $this->remoteInteractiveShell($autoConfirm);
+            }),
+
+            // Test
+            new DeployHelperOption("command", "Run a list of customer commands set in deployhelper.json commands list", function ($autoConfirm = false, $additionalArgs = []) {
+                // OLD TEST
+                // $this->setUserSimulatedCommands([
+                //     'sftp',
+                //     'shell',
+                //     'ls -la'
+                // ]);
+                $this->hideOptionsDisplay = true;
+
+                // Get the passed first argument (command key)
+                $arg1_command = count($additionalArgs) > 0 ? $additionalArgs[0] : null;
+
+                // Get available commands from config
+                $availableCommands = $this->mainConfig->config->commands;
+                $availableCommandKeys = array_keys((array)$availableCommands);
+
+                // If available commands is empty or null then bail
+                if($availableCommands == null || count($availableCommandKeys) == 0) {
+                    $this->echo("No commands found in config->commands\n", "red");
+                    return;
+                }
+
+                // If no command key then present user with available keys and ask which one they would like to run by either index or name
+                if($arg1_command == null) {
+                    $this->echo("\nAvailable commands:\n", "yellow");
+                    $i = 0;
+                    foreach($availableCommandKeys as $key) {
+                        $i++;
+                        $this->echo($i.': '.$this->color($key, 'white')."\n", "yellow");
+                    }
+
+                    $arg1_command = $this->ask("Enter command index or name to run", null);
+                }
+
+                // If null then bail
+                if($arg1_command == null) {
+                    $this->echo("\nNo command key entered\n", "red");
+                    return;
+                }
+
+                // If integer then get the key from the array
+                if(is_int((int)$arg1_command) && $arg1_command > 0 && $arg1_command <= count($availableCommandKeys)) {
+                    $arg1_command = $availableCommandKeys[$arg1_command - 1];
+                }
+
+                // Check that array key passed exists in the commands array
+                if(!isset($availableCommands->{$arg1_command})) {
+                    $this->echo("Command index or key not found in commands list\n", "red");
+                    return;
+                }
+
+                // Set the user simulated commands
+                $this->setUserSimulatedCommands($availableCommands->{$arg1_command});
             }),
 
             ($this->numConfigKeys > 1) ? new DeployHelperOption("switch", "Switch config", function ($autoConfirm = false, $additionalArgs = []) {
                 $arg1_environment = count($additionalArgs) > 0 ? $additionalArgs[0] : null;
 
-                $this->config = $this->verifyAndBuildConfig($this->jsonConfigFile, $arg1_environment);
+                $this->environmentConfig = $this->verifyAndBuildConfig($this->jsonConfigFile, $arg1_environment);
                 $this->forceSFTPRefresh = true;
             }) : null,
 
-            new DeployHelperOption("q", "Exit", function ($autoConfirm = false, $additionalArgs = []) {
+            new DeployHelperOption("clear", "Clear prepared commands", function ($autoConfirm = false, $additionalArgs = []) {
+                $this->commandsToRun = [];
+                $this->commandsCache = [];
+                $this->echo("Commands cleared\n", "green");
+            }),
+
+            new DeployHelperOption("exit", "Exit", function ($autoConfirm = false, $additionalArgs = []) {
                 $this->exitWithMessage("Exiting...\n", "grey");
             }),
         ];
@@ -207,7 +299,11 @@ class DeployHelper
         while(true)
         {
             // Get user input
-            $userInput = $this->presentOptions();
+            if(!$this->hideOptionsDisplay) {
+                $userInput = $this->presentOptions();
+            } else {
+                $userInput = $this->ask("Select an option", "");
+            }
 
             // Get inline command options
             $optionParts = explode(' ', $userInput);
@@ -290,7 +386,7 @@ class DeployHelper
         }
 
         // Show current config
-        $this->echo("\n[Current config: \033[1;33m".$this->configKey."\033[0m - ".$this->config->remoteBasePath."]", "grey");
+        $this->echo("\n[Current config: \033[1;33m".$this->environmentConfigKey."\033[0m - ".$this->environmentConfig->remoteBasePath."]", "grey");
 
         // Display number of prepared commands
         $this->echo("\n[", "grey");
@@ -305,41 +401,41 @@ class DeployHelper
     private function switchConfig()
     {
         // Get all config files
-        $configFiles = glob("deployhelper*.json");
+        $environmentConfigFiles = glob("deployhelper*.json");
 
         // If no config files found then bail
-        if(count($configFiles) == 0)
+        if(count($environmentConfigFiles) == 0)
         {
             return $this->returnWithMessage("No config files found", "red");
         }
 
         // Get user to select config file
-        $configFile = $this->interactivePathSelector($configFiles, self::PATH_SELECTOR_MODE_FILE);
+        $environmentConfigFile = $this->interactivePathSelector($environmentConfigFiles, self::PATH_SELECTOR_MODE_FILE);
 
         // If config file is null then bail
-        if($configFile == null)
+        if($environmentConfigFile == null)
         {
             return $this->returnWithMessage("No config file selected", "red");
         }
 
         // Get config key from file name
-        $configKey = str_replace('deployhelper', '', $configFile);
-        $configKey = str_replace('.json', '', $configKey);
+        $environmentConfigKey = str_replace('deployhelper', '', $environmentConfigFile);
+        $environmentConfigKey = str_replace('.json', '', $environmentConfigKey);
 
         // If config key is null then bail
-        if($configKey == null)
+        if($environmentConfigKey == null)
         {
             return $this->returnWithMessage("Invalid config file selected", "red");
         }
 
         // Set config key
-        $this->configKey = $configKey;
+        $this->environmentConfigKey = $environmentConfigKey;
 
         // Rebuild config
-        $this->config = $this->verifyAndBuildConfig($configFile);
+        $this->environmentConfig = $this->verifyAndBuildConfig($environmentConfigFile);
 
         // Show success message
-        $this->echo("Config switched to: ".$this->color($configKey, "yellow")."\n", "green");
+        $this->echo("Config switched to: ".$this->color($environmentConfigKey, "yellow")."\n", "green");
     }
 
     private function runPreparedCommands($dryRun = true)
@@ -392,6 +488,64 @@ class DeployHelper
         $this->dryRun = true;
     }
 
+    // The below is a special function that takes an array of "user typed commands", and executes them in order
+    // This has nothing to do with the commands that are prepared and run in the main script, rather it simulates 
+    // a user typing commands in the terminal and pressing enter, therefore we can run a series of commands or even
+    // enter the shell and run commands by script here
+    private function setUserSimulatedCommands(array $userTypedOutStrings)
+    {
+        $this->userSimulatedCommands = $userTypedOutStrings;
+
+        // Echo that which commands we are about to execute
+        $this->echo("Ready to run commands:\n", "green");
+        $this->wait(0.02);
+        foreach($this->userSimulatedCommands as $command) {
+            $this->echo($command."\n", "yellow");
+            $this->wait(0.02);
+        }
+
+        $this->wait(0.5);
+
+        // Return true
+        return true;
+    }
+
+    private function runNextUserSimulatedCommand(float $delayBetweenKeyStrokes = 0.01, float $delayBetweenExecution = 0.3)
+    {
+        // If no user simulated commands then bail and return false
+        if($this->userSimulatedCommands == null || count($this->userSimulatedCommands) == 0) {
+            return false;
+        }
+
+        // Get the first command
+        $command = array_shift($this->userSimulatedCommands);
+
+        // If command is null then bail and return false
+        if($command == null) {
+            return false;
+        }
+
+        // Echo the command (Simulate typing each character)
+        foreach(str_split($command) as $char) {
+            echo $char;
+            $this->wait($delayBetweenKeyStrokes);
+        }
+
+        // Wait a little before executing the command
+        $this->wait($delayBetweenExecution);
+
+        // Echo new line
+        echo PHP_EOL;
+
+        if(count($this->userSimulatedCommands) == 0) {
+            $this->echo("All commands executed\n", "green");
+            $this->hideOptionsDisplay = false;
+        }
+
+        // Return command
+        return $command;
+    }
+
     private function runRemoveBuildDirectory($autoConfirm = false)
     {
         // Prepare heading
@@ -399,7 +553,7 @@ class DeployHelper
 
 
         // Get the absolute directory path of this file plus the build directory
-        $realBuildDirectory = str_replace('\\', '/', realpath(dirname(__FILE__)))."/".$this->config->buildDirectory;
+        $realBuildDirectory = str_replace('\\', '/', realpath(dirname(__FILE__)))."/".$this->environmentConfig->buildDirectory;
 
         $this->runRemoveLocalDirectory($realBuildDirectory, $autoConfirm);
     }
@@ -410,11 +564,13 @@ class DeployHelper
         $this->echo($this->prepareHeading("RUN NPM RUN BUILD"));
 
         $this->prepareNewCommands(function () {
+            $cwd = getcwd();
+
             return [
-                function () {
+                function () use ($cwd) {
                     if($this->dryRun) $this->echo("DRY RUN: ", "grey");
                     $this->echo("COMMAND ", "yellow");
-                    $this->echo('cd "'.$this->config->applicationDirectory.'" && npm run build'.PHP_EOL, "white");
+                    $this->echo('cd "'.$this->environmentConfig->applicationDirectory.'" && npm run build'.PHP_EOL, "white");
                     if(!$this->dryRun){
                         shell_exec('cd "'.$this->config->applicationDirectory.'" && npm run build && cd ../');
                     }
@@ -466,23 +622,17 @@ class DeployHelper
                         $this->echo($fileinfo->getRealPath()."\n", "white");
                         return;
                     }
+                    
+                    if($this->dryRun) $this->echo("DRY RUN: ", "grey");
+                    $this->echo(($fileinfo->isDir()) ? "RMDIR " : "DEL ", "red");
+                    $finalPath = str_replace('\\', '/', $fileinfo->getRealPath());
+                    $this->echo($finalPath."\n");
 
                     // If directory then rmdir
-                    if($fileinfo->isDir())
-                    {
-                        if($this->dryRun) $this->echo("DRY RUN: ", "grey");
-                        $this->echo("RMDIR ", "red");
-                        $finalPath = str_replace('\\', '/', $fileinfo->getRealPath());
-                        $this->echo($finalPath."\n");
+                    if($fileinfo->isDir()) {
                         if(!$this->dryRun) rmdir($finalPath);
-                    }
                     // If file then unlink
-                    else
-                    {
-                        if($this->dryRun) $this->echo("DRY RUN: ", "grey");
-                        $this->echo("DEL ", "red");
-                        $finalPath = str_replace('\\', '/', $fileinfo->getRealPath());
-                        $this->echo($finalPath."\n");
+                    } else {
                         if(!$this->dryRun) unlink($finalPath);
                     }
                 };
@@ -587,18 +737,18 @@ class DeployHelper
                         // Show local to remote file paths
                         $this->echo($fileShow, 'white');
                         $this->echo(" -> ", 'green');
-                        $this->echo($this->config->remoteBasePath . $fileShow, 'white');
+                        $this->echo($this->environmentConfig->remoteBasePath . $fileShow, 'white');
 
                         // If not dry run then run sftp command
                         if(!$this->dryRun)
                         {
                             if($type == 'modified' || $type == 'added')
                             {
-                                $this->sftpUpload($file, $this->config->remoteBasePath . $file);
+                                $this->sftpUpload($file, $this->environmentConfig->remoteBasePath . $file);
                             }
                             else if($type == 'deleted')
                             {
-                                $this->sftpDelete($this->config->remoteBasePath . $file);
+                                $this->sftpDelete($this->environmentConfig->remoteBasePath . $file);
                             }
                         }
 
@@ -671,7 +821,7 @@ class DeployHelper
                     $this->createSFTPConnectionIfNotSet();
 
                     // Get full path
-                    $fullPath = $this->config->remoteBasePath . $file->getFileInfo();
+                    $fullPath = $this->environmentConfig->remoteBasePath . $file->getFileInfo();
 
                     // Show command to user
                     if($this->dryRun) $this->echo("DRY RUN: ", "grey");
@@ -733,7 +883,7 @@ class DeployHelper
                 $this->createSFTPConnectionIfNotSet();
 
                 // Get full path
-                $fullPath = $this->config->remoteBasePath . $file;
+                $fullPath = $this->environmentConfig->remoteBasePath . $file;
 
                 // Show command to user
                 if($this->dryRun) $this->echo("DRY RUN: ", "grey");
@@ -788,6 +938,7 @@ class DeployHelper
         // Get all current branches and assign a number to each
         $i = 1;
         foreach(array_reverse(explode("\n", shell_exec('git branch'))) as $branch) {
+            $branch = str_replace('*', '', $branch);
             $branch = str_replace('*', '', $branch);
             $branch = trim($branch);
             if($branch != '') {
@@ -915,7 +1066,7 @@ class DeployHelper
                     $this->createSFTPConnectionIfNotSet();
 
                     // Get full path
-                    $fullPath = $this->config->remoteBasePath . $file;
+                    $fullPath = $this->environmentConfig->remoteBasePath . $file;
 
                     // Show command to user
                     if($this->dryRun) $this->echo("DRY RUN: ", "grey");
@@ -948,7 +1099,7 @@ class DeployHelper
         }
 
         // Set the cwd to the base laravel directory (remoteBasePath + applicationDirectory)
-        $cwd = $this->config->remoteBasePath . $this->config->applicationDirectory;
+        $cwd = $this->environmentConfig->remoteBasePath . $this->environmentConfig->applicationDirectory;
 
         // Start the ssh2 shell stream and cd to the $cwd
         $stream = ssh2_shell($this->sftpConnection, 'vanilla', null, 200);
@@ -1050,14 +1201,24 @@ class DeployHelper
         return;
     }
 
+    private array $userSimulatedCommands = [];
+
     private function ask(string $question, mixed $default = null, string $preQuestionString = ': '): string | null
     {
         // Show question wrapped in yellow
         $this->echo("\n$question$preQuestionString", 'yellow');
 
         // Get user input
-        $handle = fopen("php://stdin", "r");
-        $line = fgets($handle);
+        if(count($this->userSimulatedCommands) == 0) {
+            $read = [STDIN];
+            $line = fgets(STDIN);
+            unset($read);
+        }
+        else {
+            $simulatedCommand = $this->runNextUserSimulatedCommand();
+            return $simulatedCommand;
+        }
+
         if (trim($line) != '') {
             return trim($line);
         }
@@ -1316,7 +1477,7 @@ class DeployHelper
     {
         $file = $this->unix_path($file);
 
-        foreach($this->config->activeGitChangesIgnoreFiles as $ignoreFile) {
+        foreach($this->environmentConfig->activeGitChangesIgnoreFiles as $ignoreFile) {
             // Allow for * as wildcards (fnmatch)
             if(fnmatch($ignoreFile, $file)) {
                 $this->echo("IGNORING ".$file."\n", "grey");
@@ -1504,7 +1665,7 @@ class DeployHelper
 
         // Check if SFTP connection is valid
         try{
-            $this->sftpConnection = ssh2_connect($this->config->host, $this->config->port);
+            $this->sftpConnection = ssh2_connect($this->environmentConfig->host, $this->environmentConfig->port);
         }catch(\Exception $e){
             $this->exitWithMessage("Error: Could not connect to SFTP server:".$e->getMessage());
         }
@@ -1514,12 +1675,12 @@ class DeployHelper
         }
 
         // Check if SFTP login is valid
-        if(!ssh2_auth_pubkey_file($this->sftpConnection, $this->config->user, $this->config->localPrivateKeyPath.'.pub', $this->config->localPrivateKeyPath, $this->config->pass)) {
+        if(!ssh2_auth_pubkey_file($this->sftpConnection, $this->environmentConfig->user, $this->environmentConfig->localPrivateKeyPath.'.pub', $this->environmentConfig->localPrivateKeyPath, $this->environmentConfig->pass)) {
             $this->exitWithMessage("Error: Could not login to SFTP server.");
         }
 
         // If connected and logged in, confirm to user and return SFTP connection
-        $this->echo("Connected to SFTP server: " . $this->color($this->config->host, 'white') . $this->color(", as user: ", 'green') . $this->color($this->config->user, 'white') . "\n", "green");
+        $this->echo("Connected to SFTP server: " . $this->color($this->environmentConfig->host, 'white') . $this->color(", as user: ", 'green') . $this->color($this->environmentConfig->user, 'white') . "\n", "green");
 
         // Create SFTP object (for use with ssh2_sftp_* functions)
         $this->sftpObject = ssh2_sftp($this->sftpConnection);
@@ -1534,28 +1695,31 @@ class DeployHelper
 
         // Parse config file
         try {
-            $config = (object)json_decode(file_get_contents($this->jsonConfigFile));
+            $this->mainConfig = (object)json_decode(file_get_contents($this->jsonConfigFile));
         }catch(\Exception $e) {
             $this->exitWithMessage("Error parsing ".$jsonConfigFile." config file. Please check the file is valid JSON.\n");
         }
 
-        // Each root key is equal to a config object, show the keys to the user so they can select which one to use
-        $configKeys = array_keys((array)$config);
-        $this->numConfigKeys = count($configKeys);
+        // Each root key other than "commands" is equal to a config object, show the keys to the user so they can select which one to use
+        $environmentConfig = $this->mainConfig->environments;
+        $environmentConfigKeys = array_keys((array)$this->mainConfig->environments);
+
+        // Set the number of config keys
+        $this->numConfigKeys = count($environmentConfigKeys);
 
         // If there is only one, set the selectedConfigKey to 0
         if($this->numConfigKeys == 1) {
-            $selectedConfigKey = $configKeys[0];
+            $selectedConfigKey = $environmentConfigKeys[0];
         }
         // Otherwise ask user to select which config object to use
         else {
             if($presetEnvironment == null) {
                 $this->echo("\nConfig file contains the following environments:\n", "grey");
-                foreach($configKeys as $configKey) {
-                    $this->echo(" - ".$configKey."\n", "white");
+                foreach($environmentConfigKeys as $environmentConfigKey) {
+                    $this->echo(" - ".$environmentConfigKey."\n", "white");
                 }
 
-                $selectedConfigKey = $this->ask("Which environment would you like to use? (".implode(", ", $configKeys).")", "grey");
+                $selectedConfigKey = $this->ask("Which environment would you like to use? (".implode(", ", $environmentConfigKeys).")", "grey");
             }
             else {
                 $selectedConfigKey = trim($presetEnvironment);
@@ -1563,15 +1727,15 @@ class DeployHelper
         }
 
         // Check if valid selection
-        if(!isset($config->{$selectedConfigKey})) {
+        if(!isset($environmentConfig->{$selectedConfigKey})) {
             $this->echo("Invalid selection\n", "red");
             return $this->verifyAndBuildConfig($jsonConfigFile);
         }
 
-        $this->configKey = $selectedConfigKey;
+        $this->environmentConfigKey = $selectedConfigKey;
 
         // Set config object to selected config object
-        $config = $config->{$this->configKey};
+        $environmentConfig = $environmentConfig->{$this->environmentConfigKey};
 
         // Verify config file has all required properties
         $requiredProperties = [
@@ -1587,29 +1751,29 @@ class DeployHelper
         ];
 
         foreach($requiredProperties as $requiredProperty) {
-            if(!isset($config->{$requiredProperty}) || $config->{$requiredProperty} === "") {
+            if(!isset($environmentConfig->{$requiredProperty}) || $environmentConfig->{$requiredProperty} === "") {
                 $this->exitWithMessage("Missing required property '".$requiredProperty."' in ".$jsonConfigFile." config file.\n");
-            }elseif($requiredProperty === "activeGitChangesIgnoreFiles" && !is_array($config->{$requiredProperty})) {
+            }elseif($requiredProperty === "activeGitChangesIgnoreFiles" && !is_array($environmentConfig->{$requiredProperty})) {
                 $this->exitWithMessage("Property '".$requiredProperty."' in ".$jsonConfigFile." config file must be an array.\n");
             }
         }
 
         // Return config object
-        return $config;
+        return $environmentConfig;
     }
 
     private function showConfig()
     {
         // Find the largest key length in config
         $padLength = 0;
-        foreach($this->config as $key => $value) {
+        foreach($this->environmentConfig as $key => $value) {
             if(strlen($key) > $padLength) {
                 $padLength = strlen($key);
             }
         }
 
         // Loop through config properties and show to user
-        foreach($this->config as $key => $value) {
+        foreach($this->environmentConfig as $key => $value) {
             $this->echo($this->color(str_pad($key, $padLength), "white")." => ", "grey");
             if(is_array($value)) {
                 foreach($value as $arrayItem) {
