@@ -20,29 +20,40 @@ This will create the default `deployhelper.json` config, and `deployhelper` PHP 
 ### 4. Setting up deployhelper.json
 ```
 {
-    "devserver": {
-        "remoteBasePath": "/home/unixuser/",
-        "localPrivateKeyPath": "/local/path/to/private/key",
-        "host": "example.com",
-        "user": "unixuser",
-        "pass": "unixpassword",
-        "port": 22,
-
-        "applicationDirectory": "laravel_application",
-        "buildDirectory": "public_html/build",
-        "activeGitChangesIgnoreFiles": ["*deployhelper*", "*.htaccess", "*.env", "*rundev.bat"]
+    "config": {
+        "commands": {
+            "build": [
+                "local rmdir /s /q \"public_html/build\"",
+                "local cd laravel_core && npm run build",
+                "gitchanges",
+                "uploadbuild",
+                "run"
+            ]
+        }
     },
-    "production": {
-        "remoteBasePath": "/home/unixuser2/",
-        "localPrivateKeyPath": "/local/path/to/private/key",
-        "host": "example2.com",
-        "user": "unixuser2",
-        "pass": "unixpassword2",
-        "port": 22,
-
-        "applicationDirectory": "laravel_application",
-        "buildDirectory": "public_html/build",
-        "activeGitChangesIgnoreFiles": ["*deployhelper*", "*.htaccess", "*.env", "*rundev.bat"]
+    "environments": {
+        "devserver": {
+            "remoteBasePath": "/home/unixuser/",
+            "localPrivateKeyPath": "/local/path/to/private/key",
+            "host": "example.com",
+            "user": "unixuser",
+            "pass": "unixpassword",
+            "port": 22,
+            "applicationDirectory": "laravel_application",
+            "buildDirectory": "public_html/build",
+            "activeGitChangesIgnoreFiles": ["*deployhelper*", "*.htaccess", "*.env", "*rundev.bat"]
+        },
+        "production": {
+            "remoteBasePath": "/home/unixuser2/",
+            "localPrivateKeyPath": "/local/path/to/private/key",
+            "host": "example2.com",
+            "user": "unixuser2",
+            "pass": "unixpassword2",
+            "port": 22,
+            "applicationDirectory": "laravel_application",
+            "buildDirectory": "public_html/build",
+            "activeGitChangesIgnoreFiles": ["*deployhelper*", "*.htaccess", "*.env", "*rundev.bat"]
+        }
     }
 }
 ```
