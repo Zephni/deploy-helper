@@ -19,8 +19,7 @@
 
     NOTE: The deploy command will run through all the steps in the correct order and prompt you for confirmation before each step.
 
-    OPTION TAGS:    You can pass --force or -f to any option to skip the confirmation steps.
-                    You can pass --dry or -d to any option to run it in dry run mode.
+    OPTION TAGS:    You can pass --dry or -d to any option to run it in dry run mode.
                     You can pass --run or -r to any option to run it in run mode.
 
 ------------------------------------*/
@@ -69,21 +68,21 @@ class DeployHelper
         $this->localBaseDirectory = $this->unix_path(getcwd());
 
         $this->options = [
-            "PREPARE COMMANDS",
+            "COMMANDS",
 
-            new DeployHelperOption("dir", "Prepare: Upload a directory", function ($autoConfirm = false, $additionalArgs = []) {
-                $this->runUploadDirectory(null, $autoConfirm);
-            }),
-
-            new DeployHelperOption("file", "Prepare: Upload a file", function ($autoConfirm = false, $additionalArgs = []) {
+            new DeployHelperOption("file", "Upload a file", function ($autoConfirm = true, $additionalArgs = []) {
                 $this->runUploadFile(null, $autoConfirm);
             }),
 
-            new DeployHelperOption("list", "Prepare: Present a list of files", function ($autoConfirm = false, $additionalArgs = []) {
+            new DeployHelperOption("dir", "Upload a directory", function ($autoConfirm = true, $additionalArgs = []) {
+                $this->runUploadDirectory(null, $autoConfirm);
+            }),
+
+            new DeployHelperOption("list", "Present a list of files to upload", function ($autoConfirm = true, $additionalArgs = []) {
                 $this->runList($autoConfirm);
             }),
 
-            new DeployHelperOption("local", "Run a command in the local terminal", function ($autoConfirm = false, $additionalArgs = []) {
+            new DeployHelperOption("local", "Run a command in the local terminal", function ($autoConfirm = true, $additionalArgs = []) {
                 $command = $this->ask("Enter command to run", null);
 
                 if($command == null) {
@@ -91,12 +90,7 @@ class DeployHelper
                     return;
                 }
 
-                // $output = shell_exec($command);
-                // $this->echo("\n".$output);
-                // $this->wait(0.5);
-
-                // Instead we need to do this as a stream and allow the user to interact with the local terminal
-                // So we now use proc_open and stream_set_blocking to allow the user to interact with the terminal
+                // Run the command with proc_open to allow for interactive commands
                 $process = proc_open($command, [STDIN, STDOUT, STDERR], $pipes);
 
                 // If process is null then bail
@@ -119,81 +113,43 @@ class DeployHelper
 
             "UPLOAD COMMANDS",
 
-            // new DeployHelperOption("1", "Prepare: Remove build directory", function ($autoConfirm = false, $additionalArgs = []) {
-            //     $this->runRemoveBuildDirectory($autoConfirm);
-            // }),
-
-            // new DeployHelperOption("2", "Prepare: npm run build", function ($autoConfirm = false, $additionalArgs = []) {
-            //     $this->runNPMRunBuild($autoConfirm);
-            // }),
-
-            new DeployHelperOption("gitchanges", "Prepare: Sync active git changes", function ($autoConfirm = false, $additionalArgs = []) {
+            new DeployHelperOption("gitchanges", "Prepare: Sync active git changes", function ($autoConfirm = true, $additionalArgs = []) {
                 $this->runGitChanges($autoConfirm, 'git status --short --porcelain --untracked-files');
             }),
 
-            new DeployHelperOption("uploadbuild", "Prepare: Upload build directory", function ($autoConfirm = false, $additionalArgs = []) {
+            new DeployHelperOption("uploadbuild", "Prepare: Upload build directory", function ($autoConfirm = true, $additionalArgs = []) {
                 $this->runUploadDirectory($this->environmentConfig->buildDirectory, $autoConfirm);
             }),
 
-            new DeployHelperOption("commits", "Upload changes from a specific branch->commit", function ($autoConfirm = false, $additionalArgs = []) {
+            new DeployHelperOption("commits", "Upload changes from a specific branch->commit", function ($autoConfirm = true, $additionalArgs = []) {
                 $this->uploadChangesFromCommit($autoConfirm);
             }),
 
             "DRY RUN OR RUN COMMANDS",
 
-            new DeployHelperOption("dry", "Dry run prepared commands", function ($autoConfirm = false, $additionalArgs = []) {
+            new DeployHelperOption("dry", "Dry run prepared commands", function ($autoConfirm = true, $additionalArgs = []) {
                 $this->dryRun = true;
                 $this->runPreparedCommands(true);
             }),
 
-            new DeployHelperOption("run", "Run prepared commands", function ($autoConfirm = false, $additionalArgs = []) {
+            new DeployHelperOption("run", "Run prepared commands", function ($autoConfirm = true, $additionalArgs = []) {
                 $this->dryRun = false;
                 $this->runPreparedCommands(false);
             }),
 
-            // new DeployHelperOption("deploy", "Run steps 1 - 4 (With confirmation before exiting DRY RUN mode)", function ($autoConfirm = false, $additionalArgs = []) {
-            //     // If force is set, supress dry output
-            //     if ($autoConfirm) {
-            //         $this->supressOutput = true;
-            //     }
-
-            //     $this->runRemoveBuildDirectory($autoConfirm);
-            //     $this->runNPMRunBuild($autoConfirm);
-            //     $this->runGitChanges($autoConfirm, 'git status --short --porcelain --untracked-files');
-
-            //     // Confirm running the above commands out of dry run mode
-            //     if (!$autoConfirm && !$this->askContinue("Exit DRY RUN mode and run above commands before preparing build directory?")) {
-            //         return;
-            //     }
-
-            //     if($autoConfirm) $this->supressOutput = false;
-            //     $this->runPreparedCommands(false);
-            //     if($autoConfirm) $this->supressOutput = true;
-
-            //     $this->runUploadDirectory($this->environmentConfig->buildDirectory, $autoConfirm);
-
-            //     // Confirm running the above commands out of dry run mode
-            //     if (!$autoConfirm && !$this->askContinue("Exit dry run mode and run above commands?")) {
-            //         return;
-            //     }
-
-            //     if($autoConfirm) $this->supressOutput = false;
-            //     $this->runPreparedCommands(false);
-            // }),
-
             "OTHER",
 
-            new DeployHelperOption("config", "Show current config (deployhelper.json)", function ($autoConfirm = false, $additionalArgs = []) {
+            new DeployHelperOption("config", "Show current config (deployhelper.json)", function ($autoConfirm = true, $additionalArgs = []) {
                 $this->showConfig();
             }),
 
-            new DeployHelperOption("sftp", "Check SFTP connection", function ($autoConfirm = false, $additionalArgs = []) {
+            new DeployHelperOption("sftp", "Check SFTP connection", function ($autoConfirm = true, $additionalArgs = []) {
                 $this->dryRun = false;
                 $this->createSFTPConnectionIfNotSet();
                 $this->dryRun = true;
             }),
 
-            new DeployHelperOption("keep", "Set keep commands mode [arg_1: boolean]", function ($autoConfirm = false, $additionalArgs = []) {
+            new DeployHelperOption("keep", "Set keep commands mode [arg_1: boolean]", function ($autoConfirm = true, $additionalArgs = []) {
                 $arg1_bool = count($additionalArgs) > 0 ? $additionalArgs[0] : null;
 
                 if($arg1_bool == 'true' || $arg1_bool == '1' || $arg1_bool == 'on' || $arg1_bool == 'yes') {
@@ -208,18 +164,13 @@ class DeployHelper
             }),
 
             // Open shell on remote machine
-            new DeployHelperOption("shell", "Open interactive shell on remote", function ($autoConfirm = false, $additionalArgs = []) {
+            new DeployHelperOption("shell", "Open interactive shell on remote", function ($autoConfirm = true, $additionalArgs = []) {
                 $this->remoteInteractiveShell($autoConfirm);
             }),
 
             // Test
-            new DeployHelperOption("command", "Run a list of customer commands set in deployhelper.json commands list", function ($autoConfirm = false, $additionalArgs = []) {
-                // OLD TEST
-                // $this->setUserSimulatedCommands([
-                //     'sftp',
-                //     'shell',
-                //     'ls -la'
-                // ]);
+            new DeployHelperOption("command", "Run a list of customer commands set in deployhelper.json commands list", function ($autoConfirm = true, $additionalArgs = []) {
+                // Hide options display until all commands are run
                 $this->hideOptionsDisplay = true;
 
                 // Get the passed first argument (command key)
@@ -268,20 +219,20 @@ class DeployHelper
                 $this->setUserSimulatedCommands($availableCommands->{$arg1_command});
             }),
 
-            ($this->numConfigKeys > 1) ? new DeployHelperOption("switch", "Switch config", function ($autoConfirm = false, $additionalArgs = []) {
+            ($this->numConfigKeys > 1) ? new DeployHelperOption("switch", "Switch config", function ($autoConfirm = true, $additionalArgs = []) {
                 $arg1_environment = count($additionalArgs) > 0 ? $additionalArgs[0] : null;
 
                 $this->environmentConfig = $this->verifyAndBuildConfig($this->jsonConfigFile, $arg1_environment);
                 $this->forceSFTPRefresh = true;
             }) : null,
 
-            new DeployHelperOption("clear", "Clear prepared commands", function ($autoConfirm = false, $additionalArgs = []) {
+            new DeployHelperOption("clear", "Clear prepared commands", function ($autoConfirm = true, $additionalArgs = []) {
                 $this->commandsToRun = [];
                 $this->commandsCache = [];
                 $this->echo("Commands cleared\n", "green");
             }),
 
-            new DeployHelperOption("exit", "Exit", function ($autoConfirm = false, $additionalArgs = []) {
+            new DeployHelperOption("exit", "Exit", function ($autoConfirm = true, $additionalArgs = []) {
                 $this->exitWithMessage("Exiting...\n", "grey");
             }),
         ];
@@ -311,7 +262,8 @@ class DeployHelper
             $selectedOptionArgs = array_slice($optionParts, 1);
 
             // Apply inline command options
-            $autoConfirm = $this->any_in_array(['--force', '-f'], $selectedOptionArgs);
+            // $autoConfirm = $this->any_in_array(['--force', '-f'], $selectedOptionArgs);
+            $autoConfirm = true;
             $autoDryRun = $this->any_in_array(['--dry', '-d'], $selectedOptionArgs);
             $autoRun = $this->any_in_array(['--run', '-r'], $selectedOptionArgs);
 
@@ -347,7 +299,7 @@ class DeployHelper
             }
 
             // Reset any inner passed options
-            $autoConfirm = false;
+            $autoConfirm = true;
             $autoDryRun = false;
             $autoRun = false;
         }
@@ -546,40 +498,7 @@ class DeployHelper
         return $command;
     }
 
-    private function runRemoveBuildDirectory($autoConfirm = false)
-    {
-        // Prepare heading
-        $this->echo($this->prepareHeading("REMOVE LOCAL BUILD DIRECTORY"));
-
-
-        // Get the absolute directory path of this file plus the build directory
-        $realBuildDirectory = str_replace('\\', '/', realpath(dirname(__FILE__)))."/".$this->environmentConfig->buildDirectory;
-
-        $this->runRemoveLocalDirectory($realBuildDirectory, $autoConfirm);
-    }
-
-    private function runNPMRunBuild($autoConfirm = false)
-    {
-        // Prepare heading
-        $this->echo($this->prepareHeading("RUN NPM RUN BUILD"));
-
-        $this->prepareNewCommands(function () {
-            $cwd = getcwd();
-
-            return [
-                function () use ($cwd) {
-                    if($this->dryRun) $this->echo("DRY RUN: ", "grey");
-                    $this->echo("COMMAND ", "yellow");
-                    $this->echo('cd "'.$this->environmentConfig->applicationDirectory.'" && npm run build'.PHP_EOL, "white");
-                    if(!$this->dryRun){
-                        shell_exec('cd "'.$this->config->applicationDirectory.'" && npm run build && cd ../');
-                    }
-                }
-            ];
-        }, $autoConfirm);
-    }
-
-    private function runRemoveLocalDirectory(string $directory = null, $autoConfirm = false)
+    private function runRemoveLocalDirectory(string $directory = null, $autoConfirm = true)
     {
         // Get the directory from user if not passed
         if($directory == null)
@@ -647,7 +566,7 @@ class DeployHelper
      * If $baseCommand is null then alert and bail
      * @return void
      */
-    private function runGitChanges($autoConfirm = false, $baseCommand = null)
+    private function runGitChanges($autoConfirm = true, $baseCommand = null)
     {
         // Prepare heading
         $this->echo($this->prepareHeading("ACTIVE GIT CHANGES"));
@@ -765,7 +684,7 @@ class DeployHelper
      * Run build: Uploads the public_html/build directory to the server
      * @return void
      */
-    private function runUploadDirectory($directory = null, $autoConfirm = false)
+    private function runUploadDirectory($directory = null, $autoConfirm = true)
     {
         // Get the file from user if not passed
         if($directory == null)
@@ -840,7 +759,7 @@ class DeployHelper
         }, $autoConfirm);
     }
 
-    private function runUploadFile(string $file = null, bool $autoConfirm = false)
+    private function runUploadFile(string $file = null, bool $autoConfirm = true)
     {
         // Get the file from user if not passed
         if($file == null)
@@ -901,7 +820,7 @@ class DeployHelper
         }, $autoConfirm);
     }
 
-    private function uploadChangesFromCommit(bool $autoConfirm = false)
+    private function uploadChangesFromCommit(bool $autoConfirm = true)
     {
         // Prepare heading
         $this->echo($this->prepareHeading("UPLOAD CHANGES FROM BRANCH COMMIT"));
@@ -1023,13 +942,13 @@ class DeployHelper
         return explode(' ', $commits[$userSelectedCommitIndex])[0];
     }
 
-    private function runList(bool $autoConfirm = false)
+    private function runList(bool $autoConfirm = true)
     {
         // Prepare heading
         $this->echo($this->prepareHeading("LIST"));
 
         // Ask user to paste a list of files to upload, one per line, capture them all to store in array
-        $this->echo("\nPaste a list of files to upload, one per line, use empty line '' to complete proccess\n\n", 'yellow');
+        $this->echo("\nType or paste a list of line seperated files to upload, use empty line '' to complete proccess\n\n", 'yellow');
 
         // Build files array
         $files = [];
@@ -1085,7 +1004,7 @@ class DeployHelper
         }, $autoConfirm);
     }
 
-    private function remoteInteractiveShell($autoConfirm = false)
+    private function remoteInteractiveShell($autoConfirm = true)
     {
         // Connect with SSH
         $this->dryRun = false;
@@ -1381,7 +1300,7 @@ class DeployHelper
         }
     }
 
-    private function prepareNewCommands($commandSetterFunction, $autoConfirm = false)
+    private function prepareNewCommands($commandSetterFunction, $autoConfirm = true)
     {
         // Reset the commandsCache array
         $this->commandsCache = [];
