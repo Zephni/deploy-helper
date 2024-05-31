@@ -83,9 +83,15 @@ class DeployHelper
             }),
 
             new DeployHelperOption("local", "Run a command in the local terminal", function ($autoConfirm = true, $additionalArgs = []) {
-                $command = $this->ask("Enter command to run", null);
+                // Check if user has passed a command through args
+                $command = trim(implode(' ', $additionalArgs));
 
-                if($command == null) {
+                // If no command then ask user for command
+                if(empty($command)) {
+                    $command = $this->ask("Enter command to run", null);
+                }
+
+                if(empty($command)) {
                     $this->echo("No command entered\n", "red");
                     return;
                 }
@@ -113,11 +119,11 @@ class DeployHelper
 
             "UPLOAD COMMANDS",
 
-            new DeployHelperOption("gitchanges", "Prepare: Sync active git changes", function ($autoConfirm = true, $additionalArgs = []) {
+            new DeployHelperOption("gitchanges", "Sync active git changes", function ($autoConfirm = true, $additionalArgs = []) {
                 $this->runGitChanges($autoConfirm, 'git status --short --porcelain --untracked-files');
             }),
 
-            new DeployHelperOption("uploadbuild", "Prepare: Upload build directory", function ($autoConfirm = true, $additionalArgs = []) {
+            new DeployHelperOption("uploadbuild", "Upload build directory", function ($autoConfirm = true, $additionalArgs = []) {
                 $this->runUploadDirectory($this->environmentConfig->buildDirectory, $autoConfirm);
             }),
 
@@ -249,6 +255,12 @@ class DeployHelper
         // Present options until user selects to exit or uses ctrl+c
         while(true)
         {
+            if($this->simulatedCommandsCompleted === true) {
+                $this->helperBot("All commands have been executed!", "🎉");
+                $this->simulatedCommandsCompleted = false;
+                $this->hideOptionsDisplay = false;
+            }
+
             // Get user input
             if(!$this->hideOptionsDisplay) {
                 $userInput = $this->presentOptions();
@@ -440,6 +452,15 @@ class DeployHelper
         $this->dryRun = true;
     }
 
+    public function helperBot(string $message, string $endIcon = null, float $endDelay = 0.7)
+    {
+        $this->echo("\n🤖  HELPER BOT: ", "yellow");
+        $this->wait(0.25);
+        $this->simulateTyping($message, 0.015, "green");
+        $this->echo(" $endIcon\n\n");
+        $this->wait($endDelay);
+    }
+
     // The below is a special function that takes an array of "user typed commands", and executes them in order
     // This has nothing to do with the commands that are prepared and run in the main script, rather it simulates 
     // a user typing commands in the terminal and pressing enter, therefore we can run a series of commands or even
@@ -448,22 +469,26 @@ class DeployHelper
     {
         $this->userSimulatedCommands = $userTypedOutStrings;
 
-        // Echo that which commands we are about to execute
-        $this->echo("Ready to run commands:\n", "green");
-        $this->wait(0.02);
+        // Helper bot tells us which commands we are about to execute
+        $this->helperBot("Ready to run the following commands!", "💻");
+
         foreach($this->userSimulatedCommands as $command) {
-            $this->echo($command."\n", "yellow");
-            $this->wait(0.02);
+            $this->echo("➡️   $command\n", "white");
+            $this->wait(0.15);
         }
 
-        $this->wait(0.5);
+        $this->wait(0.7);
 
         // Return true
         return true;
     }
 
-    private function runNextUserSimulatedCommand(float $delayBetweenKeyStrokes = 0.01, float $delayBetweenExecution = 0.3)
+    private bool $simulatedCommandsCompleted = false;
+
+    private function runNextUserSimulatedCommand(float $delayBetweenKeyStrokes = 0.015, float $delayBetweenExecution = 0.3)
     {
+        $this->simulatedCommandsCompleted = false;
+
         // If no user simulated commands then bail and return false
         if($this->userSimulatedCommands == null || count($this->userSimulatedCommands) == 0) {
             return false;
@@ -478,10 +503,7 @@ class DeployHelper
         }
 
         // Echo the command (Simulate typing each character)
-        foreach(str_split($command) as $char) {
-            echo $char;
-            $this->wait($delayBetweenKeyStrokes);
-        }
+        $this->simulateTyping($command, $delayBetweenKeyStrokes);
 
         // Wait a little before executing the command
         $this->wait($delayBetweenExecution);
@@ -490,12 +512,19 @@ class DeployHelper
         echo PHP_EOL;
 
         if(count($this->userSimulatedCommands) == 0) {
-            $this->echo("All commands executed\n", "green");
-            $this->hideOptionsDisplay = false;
+            $this->simulatedCommandsCompleted = true;
         }
 
         // Return command
         return $command;
+    }
+
+    private function simulateTyping($string, $delayBetweenKeyStrokes = 0.015, $color = "white")
+    {
+        foreach(str_split($string) as $char) {
+            $this->echo($char, $color);
+            $this->wait($delayBetweenKeyStrokes);
+        }
     }
 
     private function runRemoveLocalDirectory(string $directory = null, $autoConfirm = true)
@@ -1389,7 +1418,7 @@ class DeployHelper
 
     private function prepareHeading(string $heading): string
     {
-        return $this->color("\nPREPARE: {$heading}\n--------------------------------------\n", "grey");
+        return $this->color("\n{$heading}\n--------------------------------------\n", "grey");
     }
 
     private function isIgnoredFile($file, $showMessage = true): bool
