@@ -4,9 +4,8 @@
             "deploy": [
                 "local rmdir /s /q \"{env:buildDirectory}\"",
                 "local cd {env:applicationDirectory} && npm run build",
-                "gitchanges",
-                "uploadbuild",
-                "run"
+                "git",
+                "build"
             ]
         }
     },
