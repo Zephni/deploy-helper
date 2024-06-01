@@ -54,6 +54,7 @@ class DeployHelper
     private $forceSFTPRefresh = false;
     private $keepCommandsAfterRunning = false;
     private $hideOptionsDisplay = false;
+    private bool $simulatedCommandsCompleted = false;
     private const IGNORE_COMMAND = "IGNORE_COMMAND";
     private const PATH_SELECTOR_MODE_FILE = 1;
     private const PATH_SELECTOR_MODE_FOLDER = 2;
@@ -83,38 +84,7 @@ class DeployHelper
             }),
 
             new DeployHelperOption("local", "Run a command in the local terminal", function ($autoConfirm = true, $additionalArgs = []) {
-                // Check if user has passed a command through args
-                $command = trim(implode(' ', $additionalArgs));
-
-                // If no command then ask user for command
-                if(empty($command)) {
-                    $command = $this->ask("Enter command to run", null);
-                }
-
-                if(empty($command)) {
-                    $this->echo("No command entered\n", "red");
-                    return;
-                }
-
-                // Run the command with proc_open to allow for interactive commands
-                $process = proc_open($command, [STDIN, STDOUT, STDERR], $pipes);
-
-                // If process is null then bail
-                if($process == null) {
-                    $this->echo("Failed to run command\n", "red");
-                    return;
-                }
-
-                // Loop through the pipes and output the data
-                foreach($pipes as $pipe) {
-                    stream_set_blocking($pipe, 0);
-                    while($line = fgets($pipe)) {
-                        echo $line;
-                    }
-                }
-
-                // Allow user to continue interacting with the terminal
-                proc_close($process);
+                $this->runLocal($autoConfirm, $additionalArgs);
             }),
 
             "UPLOAD COMMANDS",
@@ -452,13 +422,66 @@ class DeployHelper
         $this->dryRun = true;
     }
 
-    public function helperBot(string $message, string $endIcon = null, float $endDelay = 0.7)
+    public function helperBot(string $message, string $endIcon = null, float $endDelay = 0.7, string $endNewLines = "\n\n")
     {
         $this->echo("\n🤖  HELPER BOT: ", "yellow");
         $this->wait(0.25);
         $this->simulateTyping($message, 0.015, "green");
-        $this->echo(" $endIcon\n\n");
+        $this->echo(" $endIcon$endNewLines");
         $this->wait($endDelay);
+    }
+
+    public function helperBotQuestionYN(string $message, string $endIcon = "🤔", float $endDelay = 0.3)
+    {
+        $this->helperBot($message, $endIcon, $endDelay, "");
+        return $this->ask($this->color("  [y/n] ", "white").$this->color("(y)", "yellow"), 'y', ":", "");
+    }
+
+    private function runLocal(bool $autoConfirm = true, array $additionalArgs = [])
+    {
+        // Check if user has passed a command through args
+        $command = trim(implode(' ', $additionalArgs));
+
+        // If no command then ask user for command
+        if(empty($command)) {
+            $command = $this->ask("Enter command to run", null);
+        }
+
+        if(empty($command)) {
+            $this->echo("No command entered\n", "red");
+            return;
+        }
+
+        // Run the command with proc_open to allow for interactive commands
+        $process = proc_open($command, [STDIN, STDOUT, STDERR], $pipes);
+
+        // If process is null then bail
+        if($process == null) {
+            $this->echo("Failed to run command\n", "red");
+            return;
+        }
+
+        // Loop through the pipes and output the data
+        foreach($pipes as $pipe) {
+            stream_set_blocking($pipe, 0);
+            while($line = fgets($pipe)) {
+                echo $line;
+            }
+        }
+
+        // Allow user to continue interacting with the terminal
+        proc_close($process);
+    }
+
+    private function injectUserVariables(string $string): string
+    {
+        // If we find the below format (with regex) then we replace it with the environment config key's value
+        // {env:anyKeyHere}
+        $string = preg_replace_callback('/\{env:([a-zA-Z0-9_]+)\}/', function($matches) {
+            return $this->environmentConfig->{$matches[1]};
+        }, $string);
+
+        return $string;
     }
 
     // The below is a special function that takes an array of "user typed commands", and executes them in order
@@ -467,23 +490,28 @@ class DeployHelper
     // enter the shell and run commands by script here
     private function setUserSimulatedCommands(array $userTypedOutStrings)
     {
-        $this->userSimulatedCommands = $userTypedOutStrings;
+        $temp = $userTypedOutStrings;
 
         // Helper bot tells us which commands we are about to execute
-        $this->helperBot("Ready to run the following commands!", "💻");
+        $this->helperBot("Please double check the commands below", "↙️");
 
-        foreach($this->userSimulatedCommands as $command) {
+        foreach($temp as $command) {
+            // Inject user variables if any
+            $command = $this->injectUserVariables($command);
             $this->echo("➡️   $command\n", "white");
             $this->wait(0.15);
         }
 
-        $this->wait(0.7);
+        $this->wait(0.2);
 
-        // Return true
-        return true;
+        // Ask user if they are ready to run the commands
+        $runSimulatedCommands = $this->helperBotQuestionYN("Are you happy to run the above commands?");
+
+        // If 'y' then run the commands
+        if(strtolower(trim($runSimulatedCommands)) == 'y' || strtolower(trim($runSimulatedCommands)) == 'yes') {
+            $this->userSimulatedCommands = $temp;
+        }
     }
-
-    private bool $simulatedCommandsCompleted = false;
 
     private function runNextUserSimulatedCommand(float $delayBetweenKeyStrokes = 0.015, float $delayBetweenExecution = 0.3)
     {
@@ -501,6 +529,9 @@ class DeployHelper
         if($command == null) {
             return false;
         }
+
+        // Inject user variables if any
+        $command = $this->injectUserVariables($command);
 
         // Echo the command (Simulate typing each character)
         $this->simulateTyping($command, $delayBetweenKeyStrokes);
@@ -1151,10 +1182,10 @@ class DeployHelper
 
     private array $userSimulatedCommands = [];
 
-    private function ask(string $question, mixed $default = null, string $preQuestionString = ': '): string | null
+    private function ask(string $question, mixed $default = null, string $preQuestionString = ': ', string $preText = "\n"): string | null
     {
         // Show question wrapped in yellow
-        $this->echo("\n$question$preQuestionString", 'yellow');
+        $this->echo("$preText$question$preQuestionString", 'yellow');
 
         // Get user input
         if(count($this->userSimulatedCommands) == 0) {

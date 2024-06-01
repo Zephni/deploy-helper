@@ -2,8 +2,8 @@
     "config": {
         "commands": {
             "build": [
-                "local rmdir /s /q \"public_html/build\"",
-                "local cd laravel_core && npm run build",
+                "local rmdir /s /q \"{env:buildDirectory}\"",
+                "local cd {env:applicationDirectory} && npm run build",
                 "gitchanges",
                 "uploadbuild",
                 "run"
