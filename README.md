@@ -18,13 +18,14 @@ php ./vendor/webregulate/deploy-helper/install.php
 This will create the default `deployhelper.json` config, and `deployhelper` PHP script in the root of your project.
 
 ### 4. Setting up deployhelper.json
+Note that you can use `{env:keyName}` to inject the current value of an environment variable into the command. This is useful for setting up the build directory, application directory, and other environment specific values.
 ```
 {
     "config": {
         "commands": {
             "build": [
-                "local rmdir /s /q \"public_html/build\"",
-                "local cd laravel_core && npm run build",
+                "local rmdir /s /q \"{env:buildDirectory}\"",
+                "local cd {env:applicationDirectory} && npm run build",
                 "gitchanges",
                 "uploadbuild",
                 "run"
