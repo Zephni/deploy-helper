@@ -342,9 +342,6 @@ class DeployHelper
 
     private function runUserCommand(bool $autoConfirm = true, array $additionalArgs = [])
     {
-        // Hide options display until all commands are run
-        $this->hideOptionsDisplay = true;
-
         // Get the passed first argument (command key)
         $arg1_command = count($additionalArgs) > 0 ? $additionalArgs[0] : null;
 
@@ -386,6 +383,9 @@ class DeployHelper
             $this->echo("Command index or key not found in commands list\n", "red");
             return;
         }
+
+        // Successfully found command list - Hide options display until all commands are run
+        $this->hideOptionsDisplay = true;
 
         // Set the user simulated commands
         $this->setUserSimulatedCommands($availableCommands->{$arg1_command});
