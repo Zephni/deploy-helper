@@ -23,7 +23,7 @@ Note that you can use `{env:keyName}` to inject the current value of an environm
 {
     "config": {
         "commands": {
-            "build": [
+            "deploy": [
                 "local rmdir /s /q \"{env:buildDirectory}\"",
                 "local cd {env:applicationDirectory} && npm run build",
                 "gitchanges",
