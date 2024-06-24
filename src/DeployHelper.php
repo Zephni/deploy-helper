@@ -439,7 +439,7 @@ class DeployHelper
     }
 
     // The below is a special function that takes an array of "user typed commands", and executes them in order
-    // This has nothing to do with the commands that are prepared and run in the main script, rather it simulates 
+    // This has nothing to do with the commands that are prepared and run in the main script, rather it simulates
     // a user typing commands in the terminal and pressing enter, therefore we can run a series of commands or even
     // enter the shell and run commands by script here
     private function setUserSimulatedCommands(array $userTypedOutStrings)
@@ -555,7 +555,7 @@ class DeployHelper
                         $this->echo($fileinfo->getRealPath()."\n", "white");
                         return;
                     }
-                    
+
                     $this->echo(($fileinfo->isDir()) ? "RMDIR " : "DEL ", "red");
                     $finalPath = str_replace('\\', '/', $fileinfo->getRealPath());
                     $this->echo($finalPath."\n");
@@ -752,7 +752,7 @@ class DeployHelper
 
                     // Run sftp command
                     $this->sftpUpload($file, $fullPath);
-                    
+
                     $this->echo("\n");
                 };
             }
@@ -811,7 +811,7 @@ class DeployHelper
 
                 // Run sftp command
                 $this->sftpUpload($file, $fullPath);
-                
+
                 $this->echo("\n");
             };
 
@@ -991,7 +991,7 @@ class DeployHelper
 
                     // Run sftp command
                     $this->sftpUpload($file, $fullPath);
-                    
+
                     $this->echo("\n");
                 };
             }
@@ -1045,7 +1045,7 @@ class DeployHelper
             fwrite($stream, $userInput . $appendEchoEndMarkerCommand . PHP_EOL);
             stream_set_blocking($stream, true);
 
-            // Get the output from the shell 
+            // Get the output from the shell
             while($line = fgets($stream)) {
                 flush();
                 $trimmedLine = trim($line);
@@ -1075,7 +1075,7 @@ class DeployHelper
                     // We've found the end marker, break out of the loop
                     break;
                 }
-                
+
                 // Echo the output to the user
                 $this->echo($trimmedLine . PHP_EOL);
             }
@@ -1604,7 +1604,7 @@ class DeployHelper
     {
         // Verify config file exists
         if(!file_exists($jsonConfigFile)) {
-            $this->exitWithMessage($jsonConfigFile." config file not found. Make sure to install with `php artisan deploy:install`.\n");
+            $this->exitWithMessage($jsonConfigFile." config file not found. Make sure to install with `php vendor/webregulate/deploy-helper/install.php` first.\n");
         }
 
         // Parse config file
@@ -1614,12 +1614,35 @@ class DeployHelper
             $this->exitWithMessage("Error parsing ".$jsonConfigFile." config file. Please check the file is valid JSON.\n");
         }
 
+        // Check that config, config.defaultEnvironment, and config.commands are set
+        // If config root item not set then exit with message
+        if(!isset($this->mainConfig->config)) {
+            $this->exitWithMessage("Missing root 'config' property in ".$jsonConfigFile." config file.\n");
+        }
+
+        // Check that the following required properties are set within config
+        $requiredConfig = [
+            "defaultEnvironment",
+            "commands"
+        ];
+
+        foreach($requiredConfig as $requiredConfigItem) {
+            if(!isset($this->mainConfig->config->{$requiredConfigItem}) || $this->mainConfig->config->{$requiredConfigItem} === "") {
+                $this->exitWithMessage("Missing required property '".$requiredConfigItem."' in ".$jsonConfigFile." config file.\n");
+            }
+        }
+
         // Each root key other than "commands" is equal to a config object, show the keys to the user so they can select which one to use
         $environmentConfig = $this->mainConfig->environments;
         $environmentConfigKeys = array_keys((array)$this->mainConfig->environments);
 
         // Set the number of config keys
         $this->numConfigKeys = count($environmentConfigKeys);
+
+        // Check if config.defaultEnvironment is set, if so then set it now
+        if(isset($this->mainConfig->config->defaultEnvironment) && $presetEnvironment == null) {
+            $presetEnvironment = $this->mainConfig->config->defaultEnvironment;
+        }
 
         // If there is only one, set the selectedConfigKey to 0
         if($this->numConfigKeys == 1) {
